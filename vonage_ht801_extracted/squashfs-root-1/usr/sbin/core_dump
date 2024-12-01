@@ -1,0 +1,16 @@
+#!/bin/sh
+
+CORE_DIR=${1}
+CORE_DUMP_NAME=${2}
+CORE_DOWNLOAD_NAME="core.gz"
+EXE_ID=${3}
+
+gzip > ${CORE_DIR}/${CORE_DUMP_NAME}
+
+if [ -n "`echo ${EXE_ID} | grep gs_`" ]; then
+    /etc/rc.d/rc.dump_core stop
+else
+    echo "Non gs_ program terminated"
+fi
+
+nvram set :core_dump=1

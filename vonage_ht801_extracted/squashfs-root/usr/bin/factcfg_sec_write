@@ -1,0 +1,83 @@
+#!/bin/sh
+
+MAC="`echo $1 | tr '[A-Z]' '[a-z]'`"
+CFGURL=$2
+CFGFILE=$MAC.pem
+
+cd /tmp
+
+[ -z "$CFGURL" ] && CFGURL="http://192.168.0.161:8080"
+
+[ -e $CFGFILE ] && rm -rf $CFGFILE
+wget -t 3 -T 5 ${CFGURL}/$CFGFILE
+if [ ! -e $CFGFILE ]; then
+    echo "no cfg file found in server!" 
+    exit 1
+fi
+
+CFGMAC="`tail -2 $CFGFILE | head -n 1 | tr '[A-Z]' '[a-z]' | tr -d ':'`"
+if [ "$CFGMAC" != "$MAC" ]; then
+    echo "MAC address not matching with cfg file, exit"
+    exit 1
+fi
+
+CHECKSUM="`tail -1 $CFGFILE`"
+sed -i '$d' $CFGFILE
+if [ "$CHECKSUM" != "`md5sum $CFGFILE | cut -c1-32`" ]; then
+    echo "checksum not matching with cfg file, exit"
+    exit 1
+fi
+
+DEV_MAC="`cat /proc/gxp/dev_info/dev_mac 2>/dev/null | tr '[A-Z]' '[a-z]' | tr -d ':'`"
+if [ "${DEV_MAC}" != "${MAC}" -a "`echo ${DEV_MAC} | cut -c7-12`" != "000000" ]; then
+    echo "MAC address not matching, exit"
+    exit 1
+fi
+    
+[ -e my.key ] && rm -rf my.key
+[ -e my.cert ] && rm -rf my.cert
+
+awk '/^-----BEGIN [A-Z]* PRIVATE KEY/, /^-----END [A-Z]* PRIVATE KEY/' $CFGFILE > my.key 
+awk '/^-----END [A-Z]* PRIVATE KEY/ {p=1;next}; p==1 {print};/^-----END CERTIFICATE-----/ {p=0}' $CFGFILE  > my.cert
+
+SN="`tail -5 $CFGFILE | grep 'Serial Number:' | cut -c15-`"
+ADMIN_PASSWORD="`tail -5 $CFGFILE | grep 'Admin Password:' | cut -c16-`"
+XML_PASSWORD="`tail -5 $CFGFILE | grep 'XML Password:' | cut -c14-`"
+HASH="`tail -5 $CFGFILE | grep 'Hash:' | cut -c6-`"
+
+KEY_FILE_SIZE="`ls -l my.key | awk '{ print $5 }'`"
+CERT_FILE_SIZE="`ls -l my.cert | awk '{ print $5 }'`"
+
+FACT_DEV="/dev/mtd`cat /proc/mtd | grep factory | cut -d: -f1 | cut -c 4-`"
+dd if=$FACT_DEV of=fact.cfg
+
+FACT_TOOL_PARA="--template fact.cfg --output my.cfg --mac $MAC"
+
+[ "$KEY_FILE_SIZE" != "0" ] && FACT_TOOL_PARA="$FACT_TOOL_PARA --key my.key"
+[ "$CERT_FILE_SIZE" != "0" ] && FACT_TOOL_PARA="$FACT_TOOL_PARA --cert my.cert"
+[ -n "$SN" ] && FACT_TOOL_PARA="$FACT_TOOL_PARA --serial $SN"
+[ -n "$ADMIN_PASSWORD" ] && FACT_TOOL_PARA="$FACT_TOOL_PARA --password $ADMIN_PASSWORD"
+[ -n "$XML_PASSWORD" ] && FACT_TOOL_PARA="$FACT_TOOL_PARA --xml_key $XML_PASSWORD"
+[ -n "$HASH" ] && FACT_TOOL_PARA="$FACT_TOOL_PARA --hash $HASH"
+[ -n "$CHECKSUM" ] && FACT_TOOL_PARA="$FACT_TOOL_PARA --checksum $CHECKSUM"
+
+factory_tool $FACT_TOOL_PARA
+
+flash_eraseall $FACT_DEV
+dd if=my.cfg of=$FACT_DEV
+
+nvram eraseall
+nvram commit
+
+rm -rf $CFGFILE
+rm -rf my.key
+rm -rf my.cert
+rm -rf my.cfg
+rm -rf fact.cfg
+
+echo 1 > /proc/gxp/cfg_reload
+
+echo "Security table write success!"
+exit 0
+
+

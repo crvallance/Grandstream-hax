@@ -1,0 +1,10 @@
+#!/bin/sh
+
+if [ -r /tmp/config/rc.conf -a "$conf_sourced" != "1" ]; then
+        . /tmp/config/rc.conf
+fi
+
+/etc/rc.d/init.d/udhcpc stop
+
+#/etc/rc.d/init.d/pppoe stop
+

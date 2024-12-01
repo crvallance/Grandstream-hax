@@ -1,0 +1,52 @@
+#!/bin/sh
+
+if [ -r /tmp/config/rc.conf -a "$conf_sourced" != "1" ]; then
+        . /tmp/config/rc.conf
+fi
+
+RESOLV_CONF=/tmp/resolv.conf
+
+while :
+do
+    USE_PREFERRED_DNS="-D"
+
+    # Re-create resolv.conf
+    echo > $RESOLV_CONF
+    if [ -n "${wan_preferred_dns1}" -a "${wan_preferred_dns1}" != "..." -a  "${wan_preferred_dns1}" != "0.0.0.0" -a -n "`nvram get 92`" -a "`nvram get 92`" != "0" ]; then
+        echo nameserver ${wan_preferred_dns1} >> $RESOLV_CONF
+        export PREFERRED_DNS_SERVER=${wan_preferred_dns1}
+    fi
+	if [ -n "${wan_preferred_dns2}" -a "${wan_preferred_dns2}" != "..." -a  "${wan_preferred_dns2}" != "0.0.0.0" -a -n "`nvram get 5026`" -a "`nvram get 5026`" != "0" ]; then
+		echo nameserver ${wan_preferred_dns2} >> $RESOLV_CONF
+		if [ -z "${PREFERRED_DNS_SERVER}" ]; then
+	        export PREFERRED_DNS_SERVER=${wan_preferred_dns2}
+		fi	
+	fi
+	if [ -n "${wan_preferred_dns3}" -a "${wan_preferred_dns3}" != "..." -a  "${wan_preferred_dns3}" != "0.0.0.0"  -a -n "`nvram get 5030`" -a "`nvram get 5030`" != "0" ]; then
+		echo nameserver ${wan_preferred_dns3} >> $RESOLV_CONF
+		if [ -z "${PREFERRED_DNS_SERVER}" ]; then
+	        export PREFERRED_DNS_SERVER=${wan_preferred_dns3}
+		fi	
+	fi
+	if [ -n "${wan_preferred_dns4}" -a "${wan_preferred_dns4}" != "..." -a  "${wan_preferred_dns4}" != "0.0.0.0"  -a -n "`nvram get 5034`" -a "`nvram get 5034`" != "0" ]; then
+		echo nameserver ${wan_preferred_dns4} >> $RESOLV_CONF
+		if [ -z "${PREFERRED_DNS_SERVER}" ]; then
+	        export PREFERRED_DNS_SERVER=${wan_preferred_dns4}
+		fi	
+	fi
+
+    if [ -z $pppoe_servicename ]; then
+        pppoecd eth0 -d -u $pppoe_username -p $pppoe_password -t $pppoe_mtu -I 10 -T 3 -N 30 $USE_PREFERRED_DNS
+    else
+        pppoecd eth0 -d -u $pppoe_username -p $pppoe_password -t $pppoe_mtu -s $pppoe_servicename -I 10 -T 3 -N 30 $USE_PREFERRED_DNS
+    fi             
+	echo stop led_wan_dhcp_ok > /proc/gxp/led_patterns
+	if [ -f /sys/class/net/eth0/operstate -a "$(cat /sys/class/net/eth0/operstate)" = "down" ]; then
+		echo stop led_error_wan_pppoe > /proc/gxp/led_patterns
+	else	
+		echo start led_error_wan_pppoe > /proc/gxp/led_patterns
+	fi	
+    sleep 3
+    echo "reschedule pppoe daemon"
+done
+

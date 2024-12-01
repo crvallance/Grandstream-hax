@@ -1,0 +1,11 @@
+#!/bin/sh
+
+if [ "x$(nvram get 25481)" = "x" ]; then
+    nvram unset 25481
+fi    
+if [ "x$(nvram get 25482)" = "x" ]; then
+    nvram unset 25482
+fi    
+if [ "x$(nvram get 25483)" = "x" ]; then
+    nvram unset 25483
+fi    

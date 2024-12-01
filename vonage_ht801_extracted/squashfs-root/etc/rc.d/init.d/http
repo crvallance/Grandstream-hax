@@ -1,0 +1,39 @@
+#!/bin/sh
+
+if [ -r /tmp/config/rc.conf -a "$conf_sourced" != "1" ]; then
+        . /tmp/config/rc.conf
+fi
+
+start() {
+    if [ -f /proc/gxp/dev_info/hw_features/dect ] && [ "`cat /proc/gxp/dev_info/hw_features/dect`" = "1" ]; then
+            httpd -h /app/www -p ${web_port} &
+    elif [ "`nvram get 190`" = "1" ]; then
+       	    httpd -h /app/www -p ${web_port} &
+	fi
+}
+
+stop() {
+        killall -9 httpd
+}
+
+restart() {
+        stop
+        start
+}
+
+case "${1}" in
+        start)
+                start
+                ;;
+        stop)
+                stop
+                ;;
+        restart)
+                restart
+                ;;
+esac
+
+exit $?
+~                                                                                                                                          
+~                                                                                                                                          
+~            

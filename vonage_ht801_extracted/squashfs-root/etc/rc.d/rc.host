@@ -1,0 +1,14 @@
+#!/bin/sh
+
+if [ -r /tmp/config/rc.conf -a "$conf_sourced" != "1" ]; then
+        . /tmp/config/rc.conf
+fi
+
+HOST=`grep hostname= /tmp/config/rc.conf | cut -f2 -d'"' | cut -f1 -d.`
+
+#
+# Setup Hostname
+#
+echo "Setting Hostname: ${hostname}"
+echo "127.0.0.1     localhost.localdomain   localhost" > /etc/hosts
+/bin/hostname ${hostname}

@@ -1,0 +1,265 @@
+#!/bin/sh
+
+# udhcpc script.
+
+if [ -r /tmp/config/rc.conf ]; then
+	. /tmp/config/rc.conf
+fi
+
+ipaddr="`/sbin/ifconfig ${interface}|grep Bcast|tr -s ' '|cut -d' ' -f3|cut -d':' -f2`"  #store old ip address
+nmask="`/sbin/ifconfig ${interface}|grep Mask|tr -s ' '|cut -d' ' -f5|cut -d':' -f2`"    #store old netmask
+change_default_routes=0
+
+[ -z "$1" ] && echo "Error: should be called from udhcpc" && exit 1
+
+RESOLV_CONF="/tmp/resolv.conf"
+RESOLV_CONF_NEW="/tmp/resolv.conf.new"
+[ -n "$broadcast" ] && BROADCAST="broadcast $broadcast"
+[ -n "$subnet" ] && NETMASK="netmask $subnet"
+
+delete_default_routes() {
+	while true 
+	do
+	    route delete default 2> /dev/null
+		if [ $? -ne 0 ]; then
+			break
+		fi	
+	done	
+}
+
+#compare the existing default routes with the new default routes from the udhcpc client
+compare_default_routes() {
+	rlist="$(route -n |grep UG|tr -s ' ' |cut -d' ' -f2)"
+	flag=0
+	change_default_routes=0
+	if [ -z $rlist ]; then     #if existing routes are empty, change the default routes
+		change_default_routes=1
+	fi	
+	for i in $rlist; do
+		for j in $router; do
+			if [ "$i" = "$j" ]; then  #if address exists in both lists.
+				flag=1
+				break
+			fi	
+		done
+		if [ $flag -eq 0 ]; then     #if address is not found in new list, change the default routes
+			change_default_routes=1
+			break
+		else
+			flag=0
+		fi	
+	done
+	if [ $change_default_routes -eq 0 -a -n $rlist ]; then
+		for i in $router; do
+			for j in $rlist; do
+				if [ "$i" = "$j" ]; then  #if address exists in both lists.
+					flag=1
+					break
+				fi	
+			done
+			if [ $flag -eq 0 ]; then     #if address is not found in old list, change the default routes
+				change_default_routes=1
+				break
+			else
+				flag=0
+			fi	
+		done
+	fi
+}
+
+update_dhcp_options() {
+    [ -n "$tftp" ] && nvram set :override_tftp_server=$tftp
+    [ -z "$tftp" ] && nvram unset override_tftp_server
+    [ -n "$ntpsrv" ] && nvram set :override_ntp_server=$ntpsrv
+    [ -z "$ntpsrv" ] && nvram unset override_ntp_server
+    [ -n "$timezone" ] && nvram set :override_time_zone=$timezone
+    [ -z "$timezone" ] && nvram unset override_time_zone
+    [ -n "$sipsrv" ] && nvram set :override_sip_servers="$sipsrv"
+    [ -z "$sipsrv" ] && nvram unset override_sip_servers
+    [ -n "$lease" ] && nvram set :dhcpc_lease_time=$lease
+    [ -z "$lease" ] && nvram unset :dhcpc_lease_time
+    [ -n "$vendor" ] && {
+		VENDOR_TEST_SERVER="`echo $vendor | parse_vendor | grep gs_test_server | cut -d' ' -f2`"
+		if [ -n "$VENDOR_TEST_SERVER" ]; then
+			/app/bin/vendor_test_suite.sh $VENDOR_TEST_SERVER	
+		fi
+        VENDOR_TFTP="`echo $vendor | parse_vendor | grep "tftp" | cut -d' ' -f2`"
+        if [ -n "$VENDOR_TFTP" ]; then
+            echo "DHCP Option 43 override TFTP"
+            nvram set :override_tftp_server=$VENDOR_TFTP
+        fi
+        CORE_PATH="`echo $vendor | parse_vendor | grep "core\-path" | cut -d' ' -f2`"
+        if [ -n "$CORE_PATH" ]; then
+            nvram set :override_core_path=$CORE_PATH
+        else
+            nvram unset override_core_path
+        fi
+		acs_url="`echo $vendor | parse_vendor | grep "acs_url" | cut -d' ' -f2`"
+		if [ -n "$acs_url" ]; then
+		nvram set :ACSURL=$acs_url
+		fi
+		provisioning_code="`echo $vendor | parse_vendor | grep "provisioning_code" | cut -d' ' -f2`"
+		if [ -n "$provisioning_code" ]; then
+		nvram set :ProvisioningCode=$provisioning_code
+		fi
+		cwmp_retry_min_wait_int="`echo $vendor | parse_vendor | grep "cwmp_retry_min_wait_int" | cut -d' ' -f2`"
+		if [ -n "$cwmp_retry_min_wait_int" ]; then
+		nvram set :CWMPRetryMinimumWaitInterval=$cwmp_retry_min_wait_int
+		fi
+		cwmp_retry_int_mult="`echo $vendor | parse_vendor | grep "cwmp_retry_int_mult" | cut -d' ' -f2`"
+		if [ -n "$cwmp_retry_int_mult" ]; then
+		nvram set :CWMPRetryIntervalMultiplier=$cwmp_retry_int_mult
+		fi
+		[ -z "$acs_url" ] && nvram unset ACSURL
+		[ -z "$provisioning_code" ] && nvram unset ProvisioningCode
+		[ -z "$cwmp_retry_min_wait_int" ] && nvram unset CWMPRetryMinimumWaitInterval
+		[ -z "$cwmp_retry_int_mult" ] && nvram unset CWMPRetryIntervalMultiplier 
+    }
+    [ -z "$vendor" ] && {
+        nvram unset override_core_path
+		nvram unset ACSURL
+		nvram unset ProvisioningCode
+		nvram unset CWMPRetryMinimumWaitInterval
+		nvram unset CWMPRetryIntervalMultiplier
+    }
+    [ -n "$vivs" ] && {
+		_oui="`echo $vivs |parse_vendor -125 | grep "GatewayManufacturerOUI"|cut -d' ' -f2`"
+		_sn="`echo $vivs |parse_vendor -125 | grep "GatewaySerialNumber"|cut -d' ' -f2`"
+		_pc="`echo $vivs |parse_vendor -125 | grep "GatewayProductClass"|cut -d' ' -f2`"
+		if [ -n "$_oui" ]; then
+			nvram set :GatewayManufacturerOUI=$_oui
+		else    
+			nvram unset :GatewayManufacturerOUI
+		fi  
+		if [ -n "$_sn" ]; then
+			nvram set :GatewaySerialNumber=$_sn
+		else    
+			nvram unset :GatewaySerialNumber
+		fi  
+		if [ -n "$_pc" ]; then
+			nvram set :GatewayProductClass=$_pc
+		else    
+			nvram unset :GatewayProductClass
+		fi  
+		#nvram set :vivs=$vivs
+	}   
+	[ -z "$vivs" ] && {
+		nvram unset :GatewayManufacturerOUI
+		nvram unset :GatewaySerialNumber
+		nvram unset :GatewayProductClass
+		#nvram unset vivs
+	}
+}
+
+case "$1" in
+    deconfig)
+        echo "deconfig dhcpc"
+		delete_default_routes
+        /sbin/ifconfig $interface 0.0.0.0
+        echo stop led_wan_dhcp_ok > /proc/gxp/led_patterns
+		echo stop led_error_wan_dhcp > /proc/gxp/led_patterns
+        nvram set :dhcpc_lease_time=0
+        send_telemetry_message 0 3 21 1 "DHCP_LEASE_RELEASE" 2 "DOWN"
+        ;;
+
+    leasefail)
+        echo "leasefail dhcpc"
+        echo stop led_wan_dhcp_ok > /proc/gxp/led_patterns
+		if [ "$(cat /sys/class/net/eth0/operstate)" = "down" ]; then
+		    echo stop led_error_wan_dhcp > /proc/gxp/led_patterns
+		else	
+	        echo start led_error_wan_dhcp > /proc/gxp/led_patterns
+        fi
+        nvram set :dhcpc_lease_time=0
+        send_telemetry_message 0 3 21 1 "DHCP_LEASE_EXPIRATION" 2 "UP"
+        ;;
+
+    renew|bound)
+        echo "renew|bound dhcpc"
+        #echo stop led_error_wan_dhcp > /proc/gxp/led_patterns
+		if [ "${ipaddr}" != "${ip}" ] || [ "${nmask}" != "${subnet}" ]; then  #change ip address and netmask only if they are different
+	        /sbin/ifconfig $interface $ip $BROADCAST $NETMASK
+		fi
+
+        if [ -n "$router" ] ; then
+			compare_default_routes 
+			if [ $change_default_routes -eq 1 ]; then
+            	echo "deleting routers"
+				delete_default_routes
+
+        	    for i in $router ; do
+            	    route add default gw $i dev $interface
+	            done
+			fi
+        fi
+
+        ISP_DNS="`nvram get 25800`" #use preferred DNS or ISP's DNS first?
+
+        echo > $RESOLV_CONF_NEW
+        [ -n "$domain" ] && echo search $domain >> $RESOLV_CONF_NEW
+
+        if [ "${ISP_DNS}x" = "x" -o "${ISP_DNS}" = "0" ]; then  #default - use preferred DNS first
+    		if [ -n "${wan_preferred_dns1}" -a "${wan_preferred_dns1}" != "..." -a  "${wan_preferred_dns1}" != "0.0.0.0" \
+	    		 -a -n "`nvram get 92`" -a "`nvram get 92`" != "0" ]; then
+                echo nameserver ${wan_preferred_dns1} >> $RESOLV_CONF_NEW
+            fi
+	    	if [ -n "${wan_preferred_dns2}" -a "${wan_preferred_dns2}" != "..." -a  "${wan_preferred_dns2}" != "0.0.0.0" \
+		    	 -a -n "`nvram get 5026`" -a "`nvram get 5026`" != "0" ]; then
+                echo nameserver ${wan_preferred_dns2} >> $RESOLV_CONF_NEW
+            fi
+	    	if [ -n "${wan_preferred_dns3}" -a "${wan_preferred_dns3}" != "..." -a  "${wan_preferred_dns3}" != "0.0.0.0" \
+		    	 -a -n "`nvram get 5030`" -a "`nvram get 5030`" != "0" ]; then
+                echo nameserver ${wan_preferred_dns3} >> $RESOLV_CONF_NEW
+            fi
+	    	if [ -n "${wan_preferred_dns4}" -a "${wan_preferred_dns4}" != "..." -a  "${wan_preferred_dns4}" != "0.0.0.0" \
+		    	 -a -n "`nvram get 5034`" -a "`nvram get 5034`" != "0" ]; then
+                echo nameserver ${wan_preferred_dns4} >> $RESOLV_CONF_NEW
+            fi
+            for i in $dns ; do
+                echo adding dns $i
+                echo nameserver $i >> $RESOLV_CONF_NEW
+            done
+        else   #use ISP DNS first
+            for i in $dns ; do
+                echo adding dns $i
+                echo nameserver $i >> $RESOLV_CONF_NEW
+            done
+	    	if [ -n "${wan_preferred_dns4}" -a "${wan_preferred_dns4}" != "..." -a  "${wan_preferred_dns4}" != "0.0.0.0" \
+		    	 -a -n "`nvram get 5034`" -a "`nvram get 5034`" != "0" ]; then
+                echo nameserver ${wan_preferred_dns4} >> $RESOLV_CONF_NEW
+            fi
+	    	if [ -n "${wan_preferred_dns3}" -a "${wan_preferred_dns3}" != "..." -a  "${wan_preferred_dns3}" != "0.0.0.0" \
+		    	 -a -n "`nvram get 5030`" -a "`nvram get 5030`" != "0" ]; then
+                echo nameserver ${wan_preferred_dns3} >> $RESOLV_CONF_NEW
+            fi
+	    	if [ -n "${wan_preferred_dns2}" -a "${wan_preferred_dns2}" != "..." -a  "${wan_preferred_dns2}" != "0.0.0.0" \
+		    	 -a -n "`nvram get 5026`" -a "`nvram get 5026`" != "0" ]; then
+                echo nameserver ${wan_preferred_dns2} >> $RESOLV_CONF_NEW
+            fi
+    		if [ -n "${wan_preferred_dns1}" -a "${wan_preferred_dns1}" != "..." -a  "${wan_preferred_dns1}" != "0.0.0.0" \
+	    		 -a -n "`nvram get 92`" -a "`nvram get 92`" != "0" ]; then
+                echo nameserver ${wan_preferred_dns1} >> $RESOLV_CONF_NEW
+            fi
+        fi    
+        echo "options rotate" >> $RESOLV_CONF_NEW
+		NEW="$(cat $RESOLV_CONF_NEW)"
+		if [ -s $RESOLV_CONF ]; then    
+			OLD="$(cat $RESOLV_CONF)"
+			if [ "${NEW}" != "${OLD}" ]; then
+				mv ${RESOLV_CONF_NEW} ${RESOLV_CONF}   #replace old resolv.conf with new
+			fi	
+		else	
+			mv ${RESOLV_CONF_NEW} ${RESOLV_CONF}
+		fi		
+
+		update_dhcp_options
+        /etc/rc.d/rc.service
+        send_telemetry_message 0 3 21 1 "DHCP_LEASE_RENEW" 2 "UP"
+        ;;
+	inform)	
+		echo "inform dhcpc"
+		update_dhcp_options
+		;;
+esac
+
+exit 0

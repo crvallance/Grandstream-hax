@@ -1,0 +1,128 @@
+#!/bin/sh
+
+#set -x
+
+test -f /bin/pub_functions && . /bin/pub_functions 
+
+if [ "`cat /proc/provision/provision_group`" = 1 ]; then
+    PROG_BLK_DEV="/dev/mtdblock`cat /proc/mtd | grep prog | cut -d: -f1 | cut -c 4- | head -1`"
+    LANG_BLK_DEV="/dev/mtdblock`cat /proc/mtd | grep lang | cut -d: -f1 | cut -c 4- | head -1`"
+else
+    PROG_BLK_DEV="/dev/mtdblock`cat /proc/mtd | grep prog | cut -d: -f1 | cut -c 4- | tail -1`"
+    LANG_BLK_DEV="/dev/mtdblock`cat /proc/mtd | grep lang | cut -d: -f1 | cut -c 4- | tail -1`"
+fi
+
+PREFIX=
+PROG_MOUNTED=false
+OEM_MOUNTED=false
+LANG_MOUNTED=false
+
+mount_tmpfs() {
+    mount -t tmpfs tmpfs /tmp || warn "mount tmp fail"
+    mount -t tmpfs tmpfs /var || warn "mount var fail"
+
+    mkdir -p /tmp/config
+    mkdir -p /tmp/core
+
+    mkdir -p $PREFIX/var/lib
+    mkdir -p $PREFIX/var/lib/dbus
+    cp /etc/machine-id $PREFIX/var/lib/dbus/
+    mkdir -p $PREFIX/var/log $PREFIX/var/spool $PREFIX/var/run $PREFIX/var/lock $PREFIX/var/user
+}
+
+mount_app_volume() {
+    mount -t squashfs $PROG_BLK_DEV /app && {
+        PROG_MOUNTED=true   
+    }
+    if $PROG_MOUNTED; then
+        info 2 "Prog volume mounted"
+    else
+        warn "Mount prog volume failed"
+    fi
+}
+
+mount_oem_volume() {
+    if [ -z "`prov_procheader $OEM_CHAR_DEV | grep 23c97af9`" ]; then
+        echo "Skipping OEM Volume"
+        return
+    fi
+
+    mount -t squashfs $OEM_BLK_DEV /oem && {
+        OEM_MOUNTED=true
+    }
+    if $OEM_MOUNTED; then
+        info 2 "OEM volume mounted"
+    else
+        warn "Mount OEM volume failed"
+    fi
+}
+
+mount_lang_volume() {
+    mount -t squashfs $LANG_BLK_DEV /lang && {
+        LANG_MOUNTED=true
+    }
+    if $LANG_MOUNTED; then
+        info 2 "Localization partition mounted"
+    else
+        warn "Localization partition mount failed"
+    fi
+}
+
+main(){
+    oem_id="`cat /proc/gxp/dev_info/hw_features/oem_id`"
+    if [ -z "$oem_id" ]; then
+        oem_id="23"
+    fi
+
+    mount_tmpfs
+    if [ -z "`mount | grep nfs`" ]; then
+        mount_app_volume
+#        mount_oem_volume
+        mount_lang_volume
+	fi
+
+
+    # Load Vonage defaults
+    if [ -z "`nvram get 2`" ]; then
+        require_pwd="`cat /proc/gxp/dev_info/hw_features/require_admin_pwd`"
+        password="`cat /proc/gxp/dev_info/security/password | awk '{printf $1 }'`"
+        if [ -n "$require_pwd" -a "$require_pwd"="1" -a -n "$password" ]; then
+        	nvram set 2=$password
+        fi
+    fi
+
+    if [ -z "`nvram get 1359`" ]; then
+        require_xml_key="`cat /proc/gxp/dev_info/hw_features/require_xml_key`"
+        xml_key="`cat /proc/gxp/dev_info/security/xml_key | awk '{printf $1 }'`"
+        if [ -n "$require_xml_key" -a "$require_xml_key"="1" -a -n "$xml_key" ]; then
+        	nvram set 1359=$xml_key
+        fi
+    fi
+
+    if [ -z "`nvram get 234`" ]; then
+        require_hash="`cat /proc/gxp/dev_info/hw_features/require_hash`"
+        hash="`cat /proc/gxp/dev_info/security/hash | awk '{printf $1 }'`/"
+        if [ -n "$require_hash" -a "$require_hash"="1" -a -n "$hash" ]; then
+        	nvram set 234=$hash
+        fi
+    fi
+
+
+    if [ ! -z "$oem_id" -a "$oem_id" != "0" -a -e "/oem_profile/$oem_id/oem_default_values" ]; then
+        nvdefault /oem_profile/$oem_id/oem_default_values
+        if [ -e "/oem_profile/$oem_id/process" ]; then
+            /oem_profile/$oem_id/process
+        fi
+
+    else
+        oem_id=0
+    fi
+
+    nvram set :oem_id=$oem_id
+	nvram set 231=1  #not router right now
+
+    echo "Loading nvram defaults"
+    nvdefault /etc/default_values
+}
+
+main $@

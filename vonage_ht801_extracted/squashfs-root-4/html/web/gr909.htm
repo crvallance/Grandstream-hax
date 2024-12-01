@@ -1,0 +1,146 @@
+<html>
+<head>
+<title>Grandstream Device Configuration</title>
+<style type="text/css">
+<!--
+.l{  font-family: Tahoma; font-size: 10pt; color: #000000; }
+a.l:Hover{  font-family: Tahoma; font-size: 10pt; color: #ffffff; }
+-->
+</style>
+<% 5054 0 <!-- %>
+<meta http-equiv="refresh" content="10">
+<% 5054 0 --> %>
+<!-- <% 5054 0 --> %>
+<meta http-equiv="refresh" content="60">
+<% 5054 0 <!-- %> -->
+</head>
+<body bgcolor="#CCCCCC">
+<form action="test_started" method="post" style=margin-bottom:0>
+<table width="870" border="1" align="center" cellpadding="0" cellspacing="0" bordercolor="#336699">
+<tr><td valign="top"><table width="100%" border="0" align="center" cellpadding="0" cellspacing="0">
+<tr><td height="48" valign="middle" bgcolor="#F3C47C" class="l" align="center"><strong><font color="#336699" size="3"><b>Grandstream Device Configuration</b></font></strong></td>
+</tr><tr><td height="20" valign="top" background="/backline.gif" bgcolor="#F3C47C" align="center">
+<table width="60%" cellpadding="0" cellspacing="0"><tr>
+<td bgcolor="#999999" align="center"><a href="index" class="l"><b>STATUS</b></a></td>
+<td bgcolor="#999999" align="center"><a href="config2" class="l"><b>BASIC SETTINGS</b></a></td>
+<td bgcolor="#999999" align="center"><a href="config2" class="l"><b>ADVANCED SETTINGS</b></a></td>
+<script type="text/javascript">
+    var model = "<% 89 %>";
+    if ( model == "HT801" )
+    {
+        document.write("<td bgcolor=\"#999999\" align=\"center\"><a href=\"config_a1\" class=\"l\"><b>FXS PORT </b></a></td>");
+    }
+    else if ( model == "HT802" )
+    {
+       document.write("<td bgcolor=\"#999999\" align=\"center\"><a href=\"config_a1\" class=\"l\"><b>FXS PORT1 </b></a></td>");
+       document.write("<td bgcolor=\"#999999\" align=\"center\"><a href=\"config_a2\" class=\"l\"><b>FXS PORT2 </b></a></td>");
+    }
+</script>
+</tr></table>
+            </td>
+        </tr>
+<!-- <% web_update 0 --> %>
+		<tr bgcolor="#FFFFCC">
+		 <td align=center><hr color="#000000" noshade><b><p style="color:#ff0000">Configuration changed. Click Apply to save settings.</p></b><hr color="#000000" noshade></td>
+		</tr>
+<% web_update 0 <!-- %> -->
+        <tr bgcolor="#FFFFCC">
+          <td> <table width="100%" border=0 cellspacing=1 cellpadding=2>
+<% 5054 0 <!-- %>
+              <tr>
+                <td colspan=2><img src="/test_animation.gif" /></td>
+              </tr>
+<% 5054 0 --> %>
+              <tr>
+                <td align=right width="100px"><b>Test To Run: </b></td>
+                <td>&nbsp;
+                  <select name="P5054">
+                    <option value=0 <% 5054 0 selected %>>No Test Selected</option>
+                    <option value=1 <% 5054 1 selected %>>Hazardous Potential Test</option>
+                    <option value=2 <% 5054 2 selected %>>Foreign Electromotive Forces Test</option>
+                    <option value=4 <% 5054 4 selected %>>Resistive Faults Test</option>
+                    <option value=8 <% 5054 8 selected %>>Receiver Offhook Test</option>
+                    <option value=32 <% 5054 32 selected %>>Ringer Equivalent Number Test</option>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td align=right><b>Line: </b></td>
+                <td>&nbsp;
+                  <select name="P5055">
+                    <option value=0 <% 5055 0 selected %>>Line 1</option>
+<% 89 HT801 <!-- %>
+                    <option value=1 <% 5055 1 selected %>>Line 2</option>
+<% 89 HT801 --> %>
+                  </select>
+                </td>
+              </tr>
+              <tr>
+                <td align=right><b>Run Interval: </b></td>
+                <td>&nbsp; <input type=text name="P5056" value="<% 5056 %>" maxlength=6 size=8>
+                  (0-604800 seconds, default 120)</td>
+              </tr>
+              <tr>
+                <td colspan=2>&nbsp;</td>
+              </tr>
+              <tr>
+                <td align=right valign=top><b>Test Results: </b></td>
+                <td>
+                  <table border=1>
+                    <tr>
+                      <td><b>Test</b></td>
+                      <td width="200px"><b>Line 1</td>
+<% 89 HT801 <!-- %>
+                      <td width="200px"><b>Line 2</td>
+<% 89 HT801 --> %>
+                    </tr>
+                    <tr>
+                      <td><b>Hazardous Potential Test</b></td>
+                      <td><% gr909_hpt_1       %></td>
+<% 89 HT801 <!-- %>
+                      <td><% gr909_hpt_2       %></td>
+<% 89 HT801 --> %>
+                    </tr>
+                    <tr>
+                      <td><b>Foreign Electromotive Forces Test</b></td>
+                      <td><% gr909_femf_1      %></td>
+<% 89 HT801 <!-- %>
+                      <td><% gr909_femf_2      %></td>
+<% 89 HT801 --> %>
+                    </tr>
+                    <tr>
+                      <td><b>Resistive Faults Test</b></td>
+                      <td><% gr909_rft_1       %></td>
+<% 89 HT801 <!-- %>
+                      <td><% gr909_rft_2       %></td>
+<% 89 HT801 --> %>
+                    </tr>
+                    <tr>
+                      <td><b>Receiver Offhook Test</b></td>
+                      <td><% gr909_roh_1       %></td>
+<% 89 HT801 <!-- %>
+                      <td><% gr909_roh_2       %></td>
+<% 89 HT801 --> %>
+                    </tr>
+                    <tr>
+                      <td><b>Ringer Equivalent Number Test</b></td>
+                      <td><% gr909_ren_1       %></td>
+<% 89 HT801 <!-- %>
+                      <td><% gr909_ren_2       %></td>
+<% 89 HT801 --> %>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr height=28 bgcolor="#F3C47C" align=center>
+                <td colspan=2> <input type="submit" name="apply" value="Run Test">
+                  &nbsp;&nbsp; <input type="button" name="cancel" value="Cancel" onClick="document.location='login'">
+                  &nbsp;&nbsp; <input type="button" name="reboot" value="Reboot" onClick="document.location='rs'">
+                  <input name="gnkey" type=hidden value=0b82> </td>
+              </tr>
+            </table></td>
+        </tr>
+<tr><td bgcolor="#336699" align="center" class="l"><font size="1">All Rights Reserved Grandstream Networks, Inc. 2006-2017</font></td></tr>
+</table></td></tr></table>
+</form>
+</body></html>

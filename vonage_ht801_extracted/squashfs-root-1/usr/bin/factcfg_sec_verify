@@ -1,0 +1,100 @@
+#!/bin/sh
+
+SN="`cat /proc/gxp/dev_info/security/sn 2>/dev/null`"
+ADMIN_PASSWORD="`cat /proc/gxp/dev_info/security/password 2>/dev/null`"
+XML_PASSWORD="`cat /proc/gxp/dev_info/security/xml_key 2>/dev/null`"
+HASH="`cat /proc/gxp/dev_info/security/hash 2>/dev/null`"
+PEM="`cat /proc/gxp/dev_info/security/private_key 2>/dev/null`"
+
+cd /tmp
+[ -f out.cfg ] && rm -f out.cfg
+touch out.cfg
+
+if [ ! -z "$PEM" ]; then
+	echo "PEM is present"
+	echo "`cat /proc/gxp/dev_info/security/private_key 2>/dev/null`" >> out.cfg
+	echo "`cat /proc/gxp/dev_info/security/certificate 2>/dev/null`" >> out.cfg
+	nvram set :pem_present=Yes
+else
+	nvram set :pem_present=No
+fi
+
+if [ ! -z "$SN" ]; then
+	echo "Serial Number is present"
+	echo "Serial Number:$SN" >> out.cfg
+	nvram set :sn_present=Yes
+else
+	nvram set :sn_present=No
+fi
+
+if [ ! -z "$ADMIN_PASSWORD" ]; then
+	echo "Admin Password is present"
+	echo "Admin Password:$ADMIN_PASSWORD" >> out.cfg
+	nvram set :adm_pwd_present=Yes
+else
+	nvram set :adm_pwd_present=No
+fi
+
+if [ ! -z "$XML_PASSWORD" ]; then
+	echo "XML Password is present"
+	echo "XML Password:$XML_PASSWORD" >> out.cfg
+	nvram set :xml_key_present=Yes
+else
+	nvram set :xml_key_present=No
+fi
+
+if [ ! -z "$HASH" ]; then
+	echo "Hash is present"
+	echo "Hash:$HASH" >> out.cfg
+	nvram set :hash_present=Yes
+else
+	nvram set :hash_present=No
+fi
+
+echo "`cat /proc/gxp/dev_info/dev_mac | tr '[a-z]' '[A-Z]'`" >> out.cfg
+MD5READ="`cat /proc/gxp/dev_info/security/checksum 2>/dev/null`"
+MD5OUTPEM=`md5sum out.cfg | cut -c1-32`
+
+rm -f out.cfg
+
+if [ "$MD5READ" != "$MD5OUTPEM" ]; then
+	echo "Security table verify failure!"
+	nvram set :security_checksum_status=Failure
+else
+	echo "Security table verify success!"
+	nvram set :security_checksum_status=Success
+fi
+
+REQUIRE_PEM="`cat /proc/gxp/dev_info/hw_features/require_pem 2>/dev/null`"
+REQUIRE_SN="`cat /proc/gxp/dev_info/hw_features/require_sn 2>/dev/null`"
+REQUIRE_ADM_PWD="`cat /proc/gxp/dev_info/hw_features/require_admin_pwd 2>/dev/null`"
+REQUIRE_XML_KEY="`cat /proc/gxp/dev_info/hw_features/require_xml_key 2>/dev/null`"
+REQUIRE_HASH="`cat /proc/gxp/dev_info/hw_features/require_hash 2>/dev/null`"
+
+[ "$REQUIRE_PEM" = "1" ] && nvram set :require_pem=Yes
+[ "$REQUIRE_PEM" = "0" ] && nvram set :require_pem=No
+[ "$REQUIRE_SN" = "1" ] && nvram set :require_sn=Yes
+[ "$REQUIRE_SN" = "0" ] && nvram set :require_sn=No
+[ "$REQUIRE_ADM_PWD" = "1" ] && nvram set :require_adm_pwd=Yes
+[ "$REQUIRE_ADM_PWD" = "0" ] && nvram set :require_adm_pwd=No
+[ "$REQUIRE_XML_KEY" = "1" ] && nvram set :require_xml_key=Yes
+[ "$REQUIRE_XML_KEY" = "0" ] && nvram set :require_xml_key=No
+[ "$REQUIRE_HASH" = "1" ] && nvram set :require_hash=Yes
+[ "$REQUIRE_HASH" = "0" ] && nvram set :require_hash=No
+
+REQUIRE_CHECK=1
+[ "$REQUIRE_PEM" = "1" -a -z "$PEM" -o "$REQUIRE_PEM" = "0" -a ! -z "$PEM" ] && REQUIRE_CHECK=0
+[ "$REQUIRE_SN" = "1" -a -z "$SN" -o "$REQUIRE_SN" = "0" -a ! -z "$SN" ] && REQUIRE_CHECK=0
+[ "$REQUIRE_ADM_PWD" = "1" -a -z "$ADMIN_PASSWORD" -o "$REQUIRE_ADM_PWD" = "0" -a ! -z "$ADMIN_PASSWORD" ] && REQUIRE_CHECK=0
+[ "$REQUIRE_XML_KEY" = "1" -a -z "$XML_PASSWORD" -o "$REQUIRE_XML_KEY" = "0" -a ! -z "$XML_PASSWORD" ] && REQUIRE_CHECK=0
+[ "$REQUIRE_HASH" = "1" -a -z "$HASH" -o "$REQUIRE_HASH" = "0" -a ! -z "$HASH" ] && REQUIRE_CHECK=0
+
+if [ "$REQUIRE_CHECK" = "1" ]; then
+	echo "Security table matches with factory cfg requirement!"
+	[ "$MD5READ" == "$MD5OUTPEM" ] && exit 0
+else
+	echo "Security table doesn't match with factory cfg requirement!"
+fi
+
+exit 1
+
